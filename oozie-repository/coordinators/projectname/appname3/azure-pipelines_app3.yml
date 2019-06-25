@@ -24,8 +24,8 @@ steps:
     echo '##vso[task.setvariable variable=shell]$(shell)'
     echo '##vso[task.setvariable variable=gavr]$(gavr)'
     echo '##vso[task.setvariable variable=app_name]appname3'
-    echo '##vso[task.setvariable variable=cordinator_parent_workflow]oozie-repository/workflows/projectname/appname3'
-    echo '##vso[task.setvariable variable=COORDINATOR_PARENT_WORKFLOW_JOB_PROPERTIES]oozie-repository/coordinators/projectname/appname1'
+    echo '##vso[task.setvariable variable=coordinator_parent_workflow_job_properties]oozie-repository/workflows/projectname/appname3'
+    echo '##vso[task.setvariable variable=coordinator_job_properties]oozie-repository/coordinators/projectname/appname3'
     whoami
     python -V 
     pwd
