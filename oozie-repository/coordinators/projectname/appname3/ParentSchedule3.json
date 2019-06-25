@@ -7,7 +7,7 @@
     "uuid": "9c626b0f-2526-45e0-a78c-afd396db635d", 
     "extra": "", 
     "type": "oozie-workflow2", 
-    "description": "Test11 Simple spark file copy workflow used as subworkflow in Parent1 and Parent3", 
+    "description": "Test12 Simple spark file copy workflow used as subworkflow in Parent1 and Parent3", 
     "is_history": false, 
     "parent_directory": [
       "2b07b334-23eb-4c47-9158-027071df42c6", 
