@@ -29,7 +29,7 @@ def parse_json_object(data):
                         print("[INFO] pig script path is: %s" %(item['properties']['script_path']))
                         workflow_dict['PIG']["source_artifact"] = str(item['properties']['script_path'])
                         workflow_dict["PIG"]["hdfs_path"] = str(decoded['workflow']['properties']['deployment_dir'])
-                    elif item['type'] == "hive-widget":
+                    elif item['type'] == "hive-widget" or item['type'] == "hive2-widget":
                         print("[INFO] hive script path is: %s" %(item['properties']['script_path']))
                         print(decoded['workflow']['properties']['deployment_dir'])
                         workflow_dict['HIVE']["source_artifact"] = str(item['properties']['script_path'])
@@ -82,7 +82,9 @@ def get_changed_cordinator(cordinator_path):
                 path = Path(input_string)
                 relative_path = path.relative_to(project_dir)
                 appname = str(relative_path).split("/")[0]
-                cordinator_list.append(appname)            
+                cordinator_list.append(appname)
+            else:
+                print("[ERROR] No cordinator found in this path: %s" %(application_path))            
     return cordinator_list
 
 
