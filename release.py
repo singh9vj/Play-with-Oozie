@@ -52,27 +52,45 @@ def create_subworkflow_dir(appname, workflow_info):
         print("ERROR in creating backup directory in hdfs")
         sys.exit(1)
 
+def delete_artifact_on_hdfs(hdfs_path, artifact_name):
+    deleted = False
+    hdfs_full_path = hdfs_path  + "/" + artifact_name
+    remove_hdfs_file_command = "hdfs dfs -rm -r " + hdfs_full_path
+    remove_command_output , remove_command_status_code = execute_command(remove_hdfs_file_command)
+    if remove_command_status_code == 0:
+        deleted = True
+    else:
+        print("[ERROR] Something went wrong while executing this command %s" %(remove_hdfs_file_command))
+        deleted = False
+    return deleted
+
 def delete_previous_artifact(build_info):
     output = defaultdict(dict)
     for key , value in build_info.iteritems():
         for k , v in value.iteritems():
-            if str(k) == "GAVR":    
-                source_path = str(v["source_path"])
-                file_name = source_path[source_path.rfind("/")+1:]
+            if str(k) == "GAVR":
+                gavr_url_list = list(v["source_path"])
+                for gavr_url in gavr_url_list:                    
+                    source_path = gavr_url
+                    file_name = source_path[source_path.rfind("/")+1:]
+                    hdfs_path = str(v["hdfs_path"])
+                    hdfs_full_path = hdfs_path  + "/" + file_name
+                    is_deleted = delete_artifact_on_hdfs(hdfs_path, file_name)
+                    if is_deleted:
+                        print("[INFO] Successfully removed this artifact %s" %(hdfs_full_path))                                        
             elif str(k) == "JOB_PROPERTIES":
                 continue
             else:
-                source_path = str(v["source_path"]) 
-                file_name = os.path.basename(source_path)
+                source_path_list = list(v["source_path"])
+                for source_path in source_path_list:
+                    source_path = str(source_path)
+                    file_name = os.path.basename(source_path)
+                    hdfs_path = str(v["hdfs_path"])
+                    hdfs_full_path = hdfs_path  + "/" + file_name
+                    is_deleted = delete_artifact_on_hdfs(hdfs_path, file_name)
+                    if is_deleted:
+                        print("[INFO] Successfully removed this artifact %s" %(hdfs_full_path))                                                            
 
-            hdfs_path = str(v["hdfs_path"])
-            hdfs_full_path = hdfs_path  + "/" + file_name
-            remove_hdfs_file_command = "hdfs dfs -rm -r " + hdfs_full_path
-            remove_command_output , remove_command_status_code = execute_command(remove_hdfs_file_command)
-            if remove_command_status_code == 0:
-                print("[INFO] Successfully removed this artifact %s" %(hdfs_full_path))
-            else:
-                print("[ERROR] Something went wrong while executing this command %s" %(remove_hdfs_file_command))
 
 def check_backup_directory(directory_info, hdfs_back_dir):
     print("[INFO] Going to check backup folder")
