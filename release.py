@@ -125,10 +125,117 @@ def import_cordinator(cordinator_file_path):
 
     return import_successfull
 
-def take_backup_from_hdfs_and_vice_versa(build_info, hdfs_back_dir, type):
+def copy_from_hdfs_to_backup(hdfs_full_path, file_name, back_up_dir):
+    status = False
+    command_to_check_file_exist_in_hdfs = "hdfs dfs -test -e " + hdfs_full_path + " && echo 'exist'"
+    check_output, check_command_status = execute_command(command_to_check_file_exist_in_hdfs)
+    if check_output == "exist" and check_command_status == 0:
+        print("[INFO] This artifact: %s exist in hdfs path: %s so going to take backup" %(file_name, hdfs_full_path))
+        backup_copy_command = "hdfs dfs -mv" + " " + hdfs_full_path + " " + back_up_dir
+        print("[INFO] Taking backup from hdfs: %s to this path: %s" %(hdfs_full_path, back_up_dir))
+        backup_output , backup_result = execute_command(backup_copy_command)
+        if backup_result == 0:
+            print("[INFO] Backup finished for this workflow")
+            status = True
+        else:
+            print("[ERROR] Something happened while executing this command %s" %(backup_copy_command))
+            status = False
+    else:
+        print("[INFO] Seems like You are doing deployment firsttime so continuing..")
+        status = True
+    return status
+
+def get_coordinator_primary_key(value):
+    cordinator_exported = False
+    for k,v in value.iteritems():
+        if str(k) == "JOB_PROPERTIES":
+            cordinator_primary_key = str(v["coordinator_primary_key"])
+            get_existing_coordinator_json(cordinator_primary_key, '/tmp')
+            cordinator_exported = True
+        else:
+            continue
+    return cordinator_exported
+
+def get_file_name_from_hdfs_backup(backup_dir_path):
+    get_file_name_command = "hdfs dfs -ls " + backup_dir_path + " | tail -1 | awk -F' ' '{print $8}'"
+    get_filename, get_file_name_status_code =  execute_command(get_file_name_command)
+    if get_file_name_status_code == 0:
+        print("[INFO] Found this file %s in this path: %s" %(get_filename, backup_dir_path))
+        return get_filename
+    else:
+        return False
+
+def move_from_backup_to_hdfs(backup_path, destination_path):
+    revert_command = "hdfs dfs -mv" + " " + backup_path + " " + destination_path
+    revert_output, revert_status_code = execute_command(revert_command)
+    print(revert_output)
+    if revert_status_code == 0:
+        print("[INFO] Successfully moved from: %s to this hdfs path: %s " %(backup_path, destination_path))
+        return True
+    else:
+        print("[ERROR] Something went wrong while executing this command: %s" %(revert_command))
+        return False
+
+def get_primary_key(value):
+    cordinator_primary_key = None
+    for k,v in value.iteritems():
+        if str(k) == "JOB_PROPERTIES":
+            cordinator_primary_key = str(v["coordinator_primary_key"])
+        else:
+            continue
+    return cordinator_primary_key
+
+def revert_changes(build_info, hdfs_back_dir, type):
     application_name = None
     workflow_name = None
     is_hdfs_artifact_deleted = False
+    status = False
+    delete_previous_artifact(build_info)
+    for key , value in build_info.iteritems():
+        app_name = os.path.dirname(key)
+        app_name = os.path.basename(app_name)
+        application_name = str(app_name)
+        dictionary_length = len(value)
+        count = 0
+        coordinator_primary_key = get_primary_key(value)
+        for k,v in value.iteritems():
+            if str(k) == "GAVR":
+                gavr_url_list = list(v["source_path"])
+                for gavr_url in gavr_url_list:
+                    workflow_name = str(k)
+                    file_name = gavr_url[gavr_url.rfind("/")+1:]
+                    workflow_backup_dir = hdfs_back_dir + "/" + application_name + "/" + workflow_name + "/" + file_name
+                    hdfs_full_path = str(v["hdfs_path"]) + "/" + file_name
+                    get_backup_file_name = get_file_name_from_hdfs_backup(workflow_backup_dir)
+                    if get_backup_file_name:
+                        backup_happened = move_from_backup_to_hdfs(get_backup_file_name, hdfs_full_path)
+                        if not backup_happened:
+                            sys.exit(1)
+                    else:
+                        print("[ERROR] No file found in this path %s" %(workflow_backup_dir))
+            elif str(k) == "JOB_PROPERTIES":
+                continue                
+            else:
+                source_path_list = list(v["source_path"])
+                for source_path in source_path_list:
+                    workflow_name = str(k)
+                    file_name = os.path.basename(source_path)
+                    workflow_backup_dir = hdfs_back_dir + "/" + application_name + "/" + workflow_name + "/" + file_name
+                    hdfs_full_path = str(v["hdfs_path"]) + "/" + file_name
+                    get_backup_file_name = get_file_name_from_hdfs_backup(workflow_backup_dir)
+                    if get_backup_file_name:
+                        backup_happened = move_from_backup_to_hdfs(get_backup_file_name, hdfs_full_path)
+                        if not backup_happened:
+                            sys.exit(1)
+                    else:
+                        print("[ERROR] No file found in this path %s" %(workflow_backup_dir))
+
+        cordinator_path = "/tmp/data_" + coordinator_primary_key + ".json"
+        import_previous_cordinator = import_cordinator(cordinator_path)
+
+def take_backup_from_hdfs_and_do_release(build_info, hdfs_back_dir, type):
+    application_name = None
+    workflow_name = None
     status = False
     for key , value in build_info.iteritems():
         app_name = os.path.dirname(key)
@@ -137,77 +244,32 @@ def take_backup_from_hdfs_and_vice_versa(build_info, hdfs_back_dir, type):
         is_cordinator_exported = False
         dictionary_length = len(value)
         count = 0
+        export_existing_coordinator = get_coordinator_primary_key(value)
         for k,v in value.iteritems():
             if str(k) == "GAVR":
-                workflow_name = str(k)
-                workflow_backup_dir = hdfs_back_dir + "/" + application_name + "/" + workflow_name + "/"
-                gavr_url = str(v["source_path"])
-                file_name = gavr_url[gavr_url.rfind("/")+1:]
-                hdfs_full_path = str(v["hdfs_path"]) + "/" + file_name
+                gavr_url_list = list(v["source_path"])
+                for gavr_url in gavr_url_list:
+                    workflow_name = str(k)
+                    file_name = gavr_url[gavr_url.rfind("/")+1:]
+                    workflow_backup_dir = hdfs_back_dir + "/" + application_name + "/" + workflow_name + "/" + file_name
+                    hdfs_full_path = str(v["hdfs_path"]) + "/" + file_name
+                    do_back_up = copy_from_hdfs_to_backup(hdfs_full_path, file_name, workflow_backup_dir)
+                    if not do_back_up:
+                        print("[ERROR] Not able to do backup from hdfs path: %s to back up path: %s" %(hdfs_back_dir, workflow_backup_dir))
+                        sys.exit(1)                    
             elif str(k) == "JOB_PROPERTIES":
-                cordinator_primary_key = str(v["coordinator_primary_key"])        
+                continue                
             else:
-                workflow_name = str(k)
-                workflow_backup_dir = hdfs_back_dir + "/" + application_name + "/" + workflow_name + "/"
-                source_path = str(v["source_path"])
-                file_name = os.path.basename(source_path)
-                hdfs_full_path = str(v["hdfs_path"]) + "/" + file_name 
-            if type == "release":
-                if not is_cordinator_exported:
-                    if str(k) == "JOB_PROPERTIES":
-                        get_existing_coordinator_json(cordinator_primary_key, '/tmp')
-                        is_cordinator_exported = True
-                if str(k) == "JOB_PROPERTIES":
-                    continue
-                else:
-                    command_to_check_file_exist_in_hdfs = "hdfs dfs -test -e " + hdfs_full_path + " && echo 'exist'"
-                    check_output, check_command_status = execute_command(command_to_check_file_exist_in_hdfs)
-                    if check_output == "exist" and check_command_status == 0:
-                        print("[INFO] This artifact: %s exist in hdfs path: %s so going to take backup" %(file_name, hdfs_full_path))
-                        backup_copy_command = "hdfs dfs -mv" + " " + hdfs_full_path + " " + workflow_backup_dir
-                        print("[INFO] Taking backup of this application: %s of this component: %s from hdfs path: %s to back up directory: %s" %(application_name, workflow_name, hdfs_full_path, workflow_backup_dir))
-                        backup_output , backup_result = execute_command(backup_copy_command)
-                        if backup_result == 0:
-                            print("[INFO] Backup finished for this workflow")
-                            status = True
-                        else:
-                            print("[ERROR] Something happened while executing this command %s" %(backup_copy_command))
-                            exit(1)
-                    else:
-                        print("[INFO] Seems like You are doing deployment firsttime so continuing..")
-                        status = True
-                        continue
-
-            elif type == "revert":
-                if str(k) == "JOB_PROPERTIES":
-                    continue
-                print("[INFO] Revert process started for this application: %s for this workflow: %s " %(application_name, workflow_name))
-                if not is_hdfs_artifact_deleted:
-                    delete_previous_artifact(build_info)
-                    is_hdfs_artifact_deleted = True
-                get_file_name_command = "hdfs dfs -ls " + workflow_backup_dir + " | tail -1 | awk -F' ' '{print $8}'"
-                get_filename, get_file_name_status_code =  execute_command(get_file_name_command)
-                if get_file_name_status_code == 0:
-                    revert_command = "hdfs dfs -mv" + " " + get_filename + " " + hdfs_full_path
-                    revert_output, revert_status_code = execute_command(revert_command)
-                    print(revert_output)
-                    if revert_status_code == 0:
-                        count += 1
-                        print("[INFO] Revert process finished for this application: %s for this workflow: %s " %(application_name, workflow_name))
-                        status = False
-                        if count == int(dictionary_length - 1):
-                            cordinator_path = "/tmp/data_" + cordinator_primary_key + ".json"
-                            import_previous_cordinator = import_cordinator(cordinator_path)
-                        else:
-                            continue
-                    else:
-                        print("[ERROR] Something bad happened while trying to revert this application: %s for this workflow: %s " %(application_name, workflow_name))
-                else:
-                    print("[ERROR] Something went wrong while executing this command: %s" %(get_file_name_command))
-            else:
-                continue
-    if not status:
-        sys.exit(1)
+                source_path_list = list(v["source_path"])
+                for source_path in source_path_list:
+                    workflow_name = str(k)
+                    file_name = os.path.basename(source_path)
+                    workflow_backup_dir = hdfs_back_dir + "/" + application_name + "/" + workflow_name + "/" + file_name
+                    hdfs_full_path = str(v["hdfs_path"]) + "/" + file_name
+                    do_back_up = copy_from_hdfs_to_backup(hdfs_full_path, file_name, workflow_backup_dir)
+                    if not do_back_up:
+                        print("[ERROR] Not able to do backup from hdfs path: %s to back up path: %s" %(hdfs_back_dir, workflow_backup_dir))
+                        sys.exit(1)
 
 def download_artifact_from_nexus(nexus_url, path_to_download):
     successfully_download = False
@@ -243,17 +305,28 @@ def run_oozie_jobs(build_data):
                     if str(refactored_fetch_job_status) == "KILLED" or str(refactored_fetch_job_status) == "FAILED":
                         successfully_ran = False
                         print("[ERROR] The polling says the jobs has been: %s , So reverting the changes" %(str(refactored_fetch_job_status)))
-                        take_backup_from_hdfs_and_vice_versa(build_data, hdfs_back_dir, "revert")
+                        revert_changes(build_data, hdfs_back_dir, "revert")
                     else:
                         successfully_ran = True
                         print("[INFO] The polling says the jobs has been: %s." %(str(refactored_fetch_job_status)))
                 else:
                     print("[ERROR] Issue while executing this command: %s , So reverting the changes" %(oozie_command_line_command))
                     successfully_ran = False
-                    take_backup_from_hdfs_and_vice_versa(build_data, hdfs_back_dir, "revert")
+                    revert_changes(build_data, hdfs_back_dir, "revert")
             else:
                 continue
     print("[INFO] Deployment done successfully..")
+
+def copy_artifact_from_local_to_hdfs_path(local_path, hdfs_path):
+    deployment_command = "hdfs dfs -copyFromLocal " + local_path + " " + hdfs_path
+    deployment_output, deployment_status_code = execute_command(deployment_command)
+    if deployment_status_code == 0:
+        print("[INFO] Successfully copied from local: %s to hdfs path: %s" %(local_path, hdfs_path))
+        return True
+    else:
+        print("[ERROR] Something went wrong while executing this command: %s " %(deployment_command))
+        print("[ERROR] Going to revert the changes")
+        return False
 
 def copy_from_local_to_hdfs_and_import_oozie(build_data):
     output = defaultdict(dict)
@@ -264,46 +337,38 @@ def copy_from_local_to_hdfs_and_import_oozie(build_data):
         for k,v in value.iteritems():
             if str(k) == "GAVR":
                 download_path = "/tmp"
-                output_path , able_to_download = download_artifact_from_nexus(str(v["source_path"]), download_path)
-                source_path = output_path
-                gavr_url = str(v["source_path"])
-                file_name = gavr_url[gavr_url.rfind("/")+1:]
-                hdfs_full_path = str(v["hdfs_path"]) + "/" + file_name
+                gavr_url_list = list(v["source_path"])
+                for gavr_url in gavr_url_list:
+                    output_path , able_to_download = download_artifact_from_nexus(gavr_url, download_path)
+                    source_path = output_path
+                    file_name = gavr_url[gavr_url.rfind("/")+1:]
+                    hdfs_full_path = str(v["hdfs_path"]) + "/" + file_name
+                    copy_successfully = copy_artifact_from_local_to_hdfs_path(source_path, hdfs_full_path)
+                    if not copy_successfully:
+                        revert_changes(build_data, hdfs_back_dir, "revert")
+                        sys.exit(1)
 
             elif str(k) == "JOB_PROPERTIES":
                 continue
             else:
-                source_path = str(v["source_path"])
-                file_name = os.path.basename(source_path)
-                hdfs_full_path = str(v["hdfs_path"]) + "/" + file_name
-            if k in output:
-                if str(v["hdfs_path"]) == str(output[k]):
-                    print("[INFO] This artifact: %s has allready been copied" %(source_path))
-                    continue
-                else:
-                    continue
-            else:
-                output[k] = v["hdfs_path"]                
-                # source_file_name = str(v["source_path"])
-                # hdfs_full_path = hdfs_path + "/" + source_file_name
-                deployment_command = "hdfs dfs -copyFromLocal " + source_path + " " + hdfs_full_path
-                deployment_output, deployment_status_code = execute_command(deployment_command)
-                if deployment_status_code == 0:
-                    print("[INFO] Successfully copied from local: %s to hdfs path: %s" %(source_path, hdfs_full_path))
-                else:
-                    print("[ERROR] Something went wrong while executing this command: %s " %(deployment_command))
-                    print("[ERROR] Going to revert the changes")
-                    take_backup_from_hdfs_and_vice_versa(build_data, hdfs_back_dir, "revert")
-                    sys.exit(1)
- 
+                source_path_list = list(v["source_path"])
+                for source_path in source_path_list:
+                    source_path = str(source_path)
+                    file_name = os.path.basename(source_path)
+                    hdfs_full_path = str(v["hdfs_path"]) + "/" + file_name
+                    copy_successfully = copy_artifact_from_local_to_hdfs_path(source_path, hdfs_full_path)
+                    if not copy_successfully:
+                        revert_changes(build_data, hdfs_back_dir, "revert")
+                        sys.exit(1)
+        print("[INFO] Now going to import the cordinator via hue")
         hue_command = """sudo chmod 755 /var/run/cloudera-scm-agent/process/ ; export PATH="/home/cdhadmin/anaconda2/bin:$PATH" ;export HUE_CONF_DIR="/var/run/cloudera-scm-agent/process/`ls -alrt /var/run/cloudera-scm-agent/process | grep -i HUE_SERVER | tail -1 | awk '{print $9}'`" ; sudo chmod -R 757 $HUE_CONF_DIR; HUE_IGNORE_PASSWORD_SCRIPT_ERRORS=1 HUE_DATABASE_PASSWORD=ZbNNYWakrb /opt/cloudera/parcels/CDH/lib/hue/build/env/bin/hue loaddata """ + str(key)
         hue_command_output, hue_command_status_code = execute_command(hue_command)
         if hue_command_status_code == 0:
             print(hue_command_output)
-            print("[INFO] Successfully imported the cordinator now going to run the oozie via cli")
+            print("[INFO] Successfully imported the cordinator")
         else:
             print("[ERROR] Something went wrong while executing this command: %s" %(hue_command))
-            take_backup_from_hdfs_and_vice_versa(build_data, hdfs_back_dir, "revert")
+            revert_changes(build_data, hdfs_back_dir, "revert")
             sys.exit(1)
 
 def main():
@@ -314,7 +379,7 @@ def main():
         details = get_details_of_build_process(build_result)
         backup_directory_info = get_backup_directory_info(details)
         check_backup_directory(details, hdfs_back_dir)
-        take_backup_from_hdfs_and_vice_versa(details, hdfs_back_dir, "release")
+        take_backup_from_hdfs_and_do_release(details, hdfs_back_dir, "release")
         copy_from_local_to_hdfs_and_import_oozie(details)
     
     elif do_what == "run":
@@ -324,7 +389,7 @@ def main():
     elif do_what == "revert":
         print("[INFO] Going to revert back")
         details = get_details_of_build_process(build_result)
-        take_backup_from_hdfs_and_vice_versa(details, hdfs_back_dir, "revert")
+        revert_changes(details, hdfs_back_dir, "revert")
 
     else:
         print("[ERROR] This service : %s is not currently supported" %(do_what))
