@@ -15,7 +15,7 @@ build_result = "build.json"
 
 
 ''' 
-I'll parse the coordinator json and will return the hive, pig script path in dictionary
+I'll parse the coordinator json and will return the corresponding workflow path in dictionary
 '''
 def parse_json_object(data):
     workflow_dict = defaultdict(dict)
@@ -144,6 +144,7 @@ def check_artifact_on_vcs(final_dict):
     coordinator_job_properties_path = os.getcwd() + "/" + coordinator_job_properties + "/job.properties"
     key_list = final_dict.keys()
     result = defaultdict(dict)
+    output = defaultdict(dict)
     for key_item in key_list:
         if key_item == "GAVR":
             print("[INFO] Going to check nexus")
@@ -154,39 +155,35 @@ def check_artifact_on_vcs(final_dict):
             continue
         else:
             tmp_list = []
+            output = defaultdict(dict)
             artifact_path_list = list(final_dict[key_item]['source_artifact'])
+            file_found = False
+            found = False
             for artifact_path in artifact_path_list:
-                print(artifact_path)
                 artifact = os.path.basename(artifact_path)
                 repository_path_list = fetch_repo_path(key_item)
-                file_found = False
-                found = False
                 for each_path in repository_path_list:               
                     full_path =  os.getcwd()+ "/" + each_path + "/" + artifact
                     my_file = Path(full_path)
                     if my_file.is_file():
                         file_found = True
-                        if key_item in result:
+                        if key_item in output:
                             tmp_list.append(full_path)
                             tmp_list = list(set(tmp_list))
-                            result[key_item]["source_path"] = full_path
+                            output[key_item]["source_path"] = tmp_list
                         else:
                             tmp_list.append(full_path)
                             tmp_list = list(set(tmp_list))
-                            result[key_item]["source_path"] = full_path
-                        result[key_item]["hdfs_path"] = final_dict[key_item]['hdfs_path']
-                        found = True
-                        continue
+                            output[key_item]["source_path"] = tmp_list
+                            output[key_item]["hdfs_path"] = final_dict[key_item]['hdfs_path']
                     else:
-                        if found:
-                        # print("[INFO] The artifact: %s has allready been found" %(key_item))
-                            continue
-                        file_found = False
+                        found = False
                 if file_found:
                     print("[INFO] The artifact of %s exist in this path: %s" %(key_item, my_file))
                 else:
                     print("[ERROR] The artifact of %s does not exist in the repository so exiting" %(key_item))
                     sys.exit(1)
+            result = merge_two_dicts(result, output)
     result["JOB_PROPERTIES"]["coordinator_primary_key"] = str(final_dict["JOB_PROPERTIES"]["coordinator_primary_key"])
     result["JOB_PROPERTIES"]["parent_workflow_job_properties_path"] = parent_workflow_job_properties_path
     result["JOB_PROPERTIES"]["coordinator_job_properties_path"] = coordinator_job_properties_path
@@ -201,6 +198,8 @@ def check_artifact_from_nexus(url_list, artifact_name):
     file_found = False
     found = False
     source_artifact_list = list(artifact_name['source_artifact'])
+    print(source_artifact_list)
+    print(url_list)
     tmp_list = []
     for source_artifact in source_artifact_list:
         for each_nexus_url in url_list:
@@ -211,62 +210,31 @@ def check_artifact_from_nexus(url_list, artifact_name):
                     data = requests.get(each_nexus_url)
                     if data.status_code == 200:            
                         print("[INFO] Artifact has been found on the above url")    
-                        found = True
                         file_found = True
                         if "GAVR" in result:
-                            tmp_list.append(source_artifact)
+                            tmp_list.append(each_nexus_url)
                             tmp_list = list(set(tmp_list))
-                            result["GAVR"]["hdfs_path"] = tmp_list
+                            result["GAVR"]["source_path"] = tmp_list
                         else:
-                            tmp_list.append(source_artifact)
+                            tmp_list.append(each_nexus_url)
                             tmp_list = list(set(tmp_list))
-                            result["GAVR"]["hdfs_path"] = tmp_list
-                        # result["GAVR"]["hdfs_path"] = artifact_name['hdfs_path']
-                        result["GAVR"]["source_path"] = each_nexus_url
-                        continue
+                            result["GAVR"]["source_path"] = tmp_list
+                            result["GAVR"]["hdfs_path"] = artifact_name['hdfs_path']
                     else:
                         print("[ERROR] Problem in download artifact from nexus")
                 else:
-                    if found:
-                        continue
-                    else:
-                        continue
+                    file_found = False
             except(Exception) as e:
                 print("[ERROR] Problem downloading the artifact. The error is: ")
                 print(e)
                 sys.exit(1)
-
-    if not file_found:
-        print("[ERROR] This artifact: %s does not exist in nexus" %(artifact_name['source_jar']))
-        sys.exit(1)
-
-    else:
-        return result   
-
-
-''' 
-I'll check whether the file is present on the required directory or not
-'''
-def check_workflow_exist_or_not(final_dict, pig_path, hive_path, shell_path):
-    key_list = final_dict.keys()
-    for key_item in key_list:
-        if key_item == "pig":
-            pig_file_name = os.path.basename(final_dict[key_item])
-            path = get_full_path(pig_file_name, pig_path)
-        elif key_item == "hive":
-            hive_file_name = os.path.basename(final_dict[key_item])
-            path = get_full_path(hive_file_name, hive_path)
-        elif key_item == "shell":
-            shell_file_name = os.path.basename(final_dict[key_item])
-            path = get_full_path(shell_file_name, shell_path)
+        if file_found:
+            print("[INFO] This artifact: %s exist in this url: %s" %(source_artifact, each_nexus_url))
         else:
-            continue
-        exists = os.path.isfile(path)
-        if exists:
-            print("[INFO] The artifact of %s exist in the repository" %(key_item))
-        else:
-            print("[ERROR] The artifact of %s does not exist in the repository so exiting" %(key_item))
+            print("[ERROR] The artifact of %s does not exist in the repository so exiting" %(source_artifact))
             sys.exit(1)
+    return result 
+
 
 def get_cordinator_json(cordinator_path, application):
     cordinator_json_path = cordinator_path + "/" + application
