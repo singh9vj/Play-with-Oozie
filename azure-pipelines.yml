@@ -8,6 +8,7 @@ steps:
     echo '##vso[task.setvariable variable=hive]$(hive)'
     echo '##vso[task.setvariable variable=shell]$(shell)'
     echo '##vso[task.setvariable variable=gavr]$(gavr)'
+    echo '##vso[task.setvariable variable=coordinator_parent_workflow_job_properties]model/oozie/workflows/serving/elasticsearch/CreateOrderElasticData'
 
 
 
