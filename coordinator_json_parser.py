@@ -236,8 +236,8 @@ def check_artifact_from_nexus(url_list, artifact_list, deployment_path):
     source_artifact_list = list(artifact_list)
     result = []
     for source_artifact in source_artifact_list:
+        found_artifact = []
         for each_nexus_url in url_list:
-            found_artifact = []
             try:
                 filename = each_nexus_url[each_nexus_url.rfind("/")+1:]
                 if filename in found_artifact:
