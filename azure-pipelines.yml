@@ -26,4 +26,4 @@ steps:
 - task: Bash@3
   inputs:
     targetType: 'inline'
-    script: 'python coordinator_json_parser.py build'
+    script: '/usr/bin/python coordinator_json_parser.py build'
