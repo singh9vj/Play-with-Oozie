@@ -237,16 +237,22 @@ def check_artifact_from_nexus(url_list, artifact_list, deployment_path):
     result = []
     for source_artifact in source_artifact_list:
         for each_nexus_url in url_list:
+            found_artifact = []
             try:
                 filename = each_nexus_url[each_nexus_url.rfind("/")+1:]
+                if filename in found_artifact:
+                    print("[INFO] This artifact %s has already been found" %(filename))
+                    continue
                 if filename == source_artifact:
                     data = requests.get(each_nexus_url)
-                    if data.status_code == 200:            
+                    if data.status_code == 200:
+                        found_artifact.append(filename)            
                         print("[INFO] This Artifact: %s has been found on this url: %s" %(source_artifact, each_nexus_url))    
                         file_found = True
                         path = each_nexus_url + ":::" + deployment_path + "/lib"
                         result.append(path)
                     else:
+                        found_artifact.append(filename)
                         print("[ERROR] Problem in download artifact from nexus")
                 else:
                     file_found = False
