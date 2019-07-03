@@ -12,42 +12,70 @@ application_name = os.environ['APP_NAME']
 coordinator_parent_workflow_job_properties = os.environ['COORDINATOR_PARENT_WORKFLOW_JOB_PROPERTIES']
 coordinator_job_properties = os.environ['COORDINATOR_JOB_PROPERTIES']
 build_result = "build.json"
+print(os.environ['HIVE'])
+print(os.environ['PIG'])
+print(os.environ['SHELL'])
 
 
 ''' 
-I'll parse the coordinator json and will return the hive, pig script path in dictionary
+I'll parse the coordinator json and will return the corresponding workflow path in dictionary
 '''
 def parse_json_object(data):
     workflow_dict = defaultdict(dict)
     for items in data:
+        pig_list = []
+        hive_list = []
+        shell_list = []
+        spark_list = []
+        jar_list = []
         if str(items["fields"]["type"]) == "oozie-workflow2":
             data_item = items["fields"]["data"]
             try:
                 decoded = json.loads(data_item)
+                deployment_dir = str(decoded['workflow']['properties']['deployment_dir'])
+                print("The deployment directory found is: %s" % deployment_dir)
                 for item in decoded['workflow']['nodes']:
                     if item['type'] == "pig-widget":
                         print("[INFO] pig script path is: %s" %(item['properties']['script_path']))
-                        workflow_dict['PIG']["source_artifact"] = str(item['properties']['script_path'])
-                        workflow_dict["PIG"]["hdfs_path"] = str(decoded['workflow']['properties']['deployment_dir'])
+                        pig_list.append(str(item['properties']['script_path']))
+                        pig_list = list(set(pig_list))
+                                                
                     elif item['type'] == "hive-widget" or item['type'] == "hive2-widget":
                         print("[INFO] hive script path is: %s" %(item['properties']['script_path']))
-                        print(decoded['workflow']['properties']['deployment_dir'])
-                        workflow_dict['HIVE']["source_artifact"] = str(item['properties']['script_path'])
-                        workflow_dict['HIVE']["hdfs_path"] = str(decoded['workflow']['properties']['deployment_dir'])
+                        hive_list.append(str(item['properties']['script_path']))
+                        hive_list = list(set(hive_list))
+                        
                     elif item['type'] == "shell-widget":
-                        print(decoded['workflow']['properties']['deployment_dir'])
                         for shell_files in item['properties']['files']:
                             print("[INFO] shell script path is: %s" %(shell_files['value']))
-                            workflow_dict['SHELL']["source_artifact"] = str(shell_files['value'])
-                            workflow_dict['SHELL']["hdfs_path"] = str(decoded['workflow']['properties']['deployment_dir'])
+                            shell_list.append(str(shell_files['value']))
+                            shell_list = list(set(shell_list))
+                            
                     elif item['type'] == "spark-widget":
                         print("[INFO] Spark artifact name is: %s" %(item['properties']['jars']))
-                        workflow_dict["GAVR"]["source_jar"] = str(item['properties']['jars'])
-                        workflow_dict["GAVR"]["hdfs_path"] = str(decoded['workflow']['properties']['deployment_dir']) + "/lib"
+                        spark_list.append(str(item['properties']['jars']))
+                        spark_list = list(set(spark_list))
+
+                    elif item['type'] == "java-widget":
+                        print("[INFO] Java artifact name is: %s" %(item['properties']['jar_path']))
+                        jar_list.append(str(item['properties']['jar_path']))
+                        jar_list = list(set(jar_list)) 
                     else:
                         continue
+
             except(ValueError, KeyError, TypeError):
                 print("[WARNING] in coordinator JSON")
+
+            if shell_list:
+                workflow_dict[deployment_dir]['SHELL'] = shell_list
+            if pig_list:
+                workflow_dict[deployment_dir]['PIG'] = pig_list
+            if hive_list:
+                workflow_dict[deployment_dir]['HIVE'] = hive_list
+            if spark_list:
+                workflow_dict[deployment_dir]['GAVR'] = spark_list
+            if jar_list:
+                workflow_dict[deployment_dir]['JAVA'] = jar_list
 
         elif str(items["fields"]["type"]) == "oozie-coordinator2":
             workflow_dict["JOB_PROPERTIES"]["coordinator_primary_key"] = str(items["pk"])
@@ -84,7 +112,8 @@ def get_changed_cordinator(cordinator_path):
                 appname = str(relative_path).split("/")[0]
                 cordinator_list.append(appname)
             else:
-                print("[ERROR] No cordinator found in this path: %s" %(application_path))            
+                print("[ERROR] No cordinator found in this path so exiting: %s" %(application_path))
+                sys.exit(1)            
     return cordinator_list
 
 
@@ -112,40 +141,86 @@ def check_artifact_on_vcs(final_dict):
     coordinator_job_properties_path = os.getcwd() + "/" + coordinator_job_properties + "/job.properties"
     key_list = final_dict.keys()
     result = defaultdict(dict)
-    for key_item in key_list:
-        if key_item == "GAVR":
-            print("[INFO] Going to check nexus")
-            gavr_list = fetch_repo_path(key_item)
-            output = check_artifact_from_nexus(gavr_list, final_dict[key_item])
-            result = merge_two_dicts(result, output)
-        elif key_item == "JOB_PROPERTIES":
+    output = defaultdict(dict)
+    shell_list = []
+    pig_list = []
+    hive_list = []
+    spark_list = []
+    jar_list = []
+    for key, value in final_dict.iteritems():
+        if key == "JOB_PROPERTIES":
             continue
         else:
-            artifact_path = final_dict[key_item]['source_artifact']
-            print(artifact_path)
-            artifact = os.path.basename(artifact_path)
-            repository_path_list = fetch_repo_path(key_item)
-            file_found = False
-            found = False
-            for each_path in repository_path_list:               
-                full_path =  os.getcwd()+ "/" + each_path + "/" + artifact
-                my_file = Path(full_path)
-                if my_file.is_file():
-                    file_found = True
-                    result[key_item]["source_path"] = full_path
-                    result[key_item]["hdfs_path"] = final_dict[key_item]['hdfs_path']
-                    found = True
-                    continue
+            deployment_path = key
+            for inner_key, inner_value in value.iteritems():
+                if inner_key == "GAVR" or inner_key == "JAVA":
+                    print("[INFO] Going to check nexus")
+                    url_list = fetch_repo_path(inner_key)
+                    output_result = check_artifact_from_nexus(url_list, inner_value, deployment_path)
+                    spark_list.append(output_result)
+                elif inner_key == "JAVA":
+                    print("[INFO] Going to check nexus")
+                    url_list = fetch_repo_path(inner_key)
+                    output_result = check_artifact_from_nexus(url_list, inner_value, deployment_path)
+                    jar_list.append(output_result)
                 else:
-                    if found:
-                        # print("[INFO] The artifact: %s has allready been found" %(key_item))
-                        continue
+                    found_artifact = []
+                    artifact_path_list = list(inner_value)
                     file_found = False
-            if file_found:
-                print("[INFO] The artifact of %s exist in this path: %s" %(key_item, my_file))
-            else:
-                print("[ERROR] The artifact of %s does not exist in the repository so exiting" %(key_item))
-                sys.exit(1)
+                    for artifact_path in artifact_path_list:
+                        artifact = os.path.basename(artifact_path)
+                        repository_path_list = fetch_repo_path(inner_key)
+                        for each_path in repository_path_list:
+                            full_path =  os.getcwd()+ "/" + each_path + "/" + artifact
+                            my_file = Path(full_path)
+                            if artifact in found_artifact:
+                                continue
+                            if my_file.is_file():
+                                file_found = True
+                                # print("[INFO] This artifact: %s has been found in this path: %s" %(artifact, each_path))
+                                if inner_key in output:
+                                    found_artifact.append(artifact)
+                                    path = full_path + ":::" + deployment_path
+                                    if inner_key == "SHELL":
+                                        shell_list.append(path)
+                                    elif inner_key == "HIVE":
+                                        hive_list.append(path)
+                                    elif inner_key == "PIG":
+                                        pig_list.append(path)
+                                    else:
+                                        print("[ERROR] This workflow: %s is not supported yet" %(inner_key))
+                                        sys.exit(1)
+                                else:
+                                    found_artifact.append(artifact)
+                                    path = full_path + ":::" + deployment_path
+                                    if inner_key == "SHELL":
+                                        shell_list.append(path)
+                                    elif inner_key == "HIVE":
+                                        hive_list.append(path)
+                                    elif inner_key == "PIG":
+                                        pig_list.append(path)
+                                    else:
+                                        print("[ERROR] This workflow: %s is not supported yet" %(inner_key))
+                                        sys.exit(1)
+                            else:
+                                file_found = False
+                                continue
+                        if file_found:
+                            print("[INFO] This artifact: %s exist in this path: %s" %(artifact, my_file))
+                        else:
+                            print("[ERROR] This artifact: %s of %s does not exist in the repository so exiting" %(artifact, inner_key))
+                            sys.exit(1)   
+    if shell_list:
+        result["SHELL"]["both_path_list"] = shell_list
+    if hive_list:
+        result["HIVE"]["both_path_list"] = hive_list
+    if pig_list:
+        result["PIG"]["both_path_list"] = pig_list
+    if spark_list:
+        result["GAVR"]["both_path_list"] = spark_list
+    if jar_list:
+        result["JAVA"]["both_path_list"] = jar_list
+    
     result["JOB_PROPERTIES"]["coordinator_primary_key"] = str(final_dict["JOB_PROPERTIES"]["coordinator_primary_key"])
     result["JOB_PROPERTIES"]["parent_workflow_job_properties_path"] = parent_workflow_job_properties_path
     result["JOB_PROPERTIES"]["coordinator_job_properties_path"] = coordinator_job_properties_path
@@ -155,66 +230,38 @@ def get_full_path(file_name, path):
     full_path = os.getcwd()+ "/" + path + "/" + file_name
     return full_path
 
-def check_artifact_from_nexus(url_list, artifact_name):
-    result = defaultdict(dict)
+def check_artifact_from_nexus(url_list, artifact_list, deployment_path):
     file_found = False
     found = False
-    for each_nexus_url in url_list:
-        print('[INFO] Going to check artifact on this url: %s' %(each_nexus_url))
-        try:
-            filename = each_nexus_url[each_nexus_url.rfind("/")+1:]
-            if filename == artifact_name['source_jar']:
-                data = requests.get(each_nexus_url)
-                if data.status_code == 200:            
-                    print("[INFO] Artifact has been found on the above url")    
-                    found = True
-                    file_found = True
-                    result["GAVR"]["hdfs_path"] = artifact_name['hdfs_path']
-                    result["GAVR"]["source_path"] = each_nexus_url
-                    continue
+    source_artifact_list = list(artifact_list)
+    result = []
+    for source_artifact in source_artifact_list:
+        for each_nexus_url in url_list:
+            try:
+                filename = each_nexus_url[each_nexus_url.rfind("/")+1:]
+                if filename == source_artifact:
+                    data = requests.get(each_nexus_url)
+                    if data.status_code == 200:            
+                        print("[INFO] This Artifact: %s has been found on this url: %s" %(source_artifact, each_nexus_url))    
+                        file_found = True
+                        path = each_nexus_url + ":::" + deployment_path + "/lib"
+                        result.append(path)
+                    else:
+                        print("[ERROR] Problem in download artifact from nexus")
                 else:
-                    print("[ERROR] Problem in download artifact from nexus")
-            else:
-                if found:
+                    file_found = False
                     continue
-                else:
-                    continue
-        except(Exception) as e:
-            print("[ERROR] Problem downloading the artifact. The error is: ")
-            print(e)
-            sys.exit(1)
-
-    if not file_found:
-        print("[ERROR] This artifact: %s does not exist in nexus" %(artifact_name['source_jar']))
-        sys.exit(1)
-
-    else:
-        return result   
-
-
-''' 
-I'll check whether the file is present on the required directory or not
-'''
-def check_workflow_exist_or_not(final_dict, pig_path, hive_path, shell_path):
-    key_list = final_dict.keys()
-    for key_item in key_list:
-        if key_item == "pig":
-            pig_file_name = os.path.basename(final_dict[key_item])
-            path = get_full_path(pig_file_name, pig_path)
-        elif key_item == "hive":
-            hive_file_name = os.path.basename(final_dict[key_item])
-            path = get_full_path(hive_file_name, hive_path)
-        elif key_item == "shell":
-            shell_file_name = os.path.basename(final_dict[key_item])
-            path = get_full_path(shell_file_name, shell_path)
+            except(Exception) as e:
+                print("[ERROR] Problem downloading the artifact. The error is: ")
+                print(e)
+                sys.exit(1)
+        if file_found:
+            print("[INFO] This artifact: %s exist in this url: %s" %(source_artifact, each_nexus_url))
         else:
-            continue
-        exists = os.path.isfile(path)
-        if exists:
-            print("[INFO] The artifact of %s exist in the repository" %(key_item))
-        else:
-            print("[ERROR] The artifact of %s does not exist in the repository so exiting" %(key_item))
+            print("[ERROR] The artifact of %s does not exist in the repository so exiting" %(source_artifact))
             sys.exit(1)
+    return result 
+
 
 def get_cordinator_json(cordinator_path, application):
     cordinator_json_path = cordinator_path + "/" + application
