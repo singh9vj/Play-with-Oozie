@@ -9,7 +9,7 @@ steps:
     echo '##vso[task.setvariable variable=shell]$(shell)'
     echo '##vso[task.setvariable variable=gavr]$(gavr)'
     echo '##vso[task.setvariable variable=coordinator_parent_workflow_job_properties]model/oozie/workflows/serving/elasticsearch/CreateOrderElasticData'
-
+    echo '##vso[task.setvariable variable=coordinator_job_properties]qweqw'
 
 
 # An environment variable called `Helix Genome Variables` has been added to all downstream steps
