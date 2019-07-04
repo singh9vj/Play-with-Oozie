@@ -153,7 +153,7 @@ def check_artifact_on_vcs(final_dict):
         else:
             deployment_path = key
             for inner_key, inner_value in value.iteritems():
-                if inner_key == "GAVR" or inner_key == "JAVA":
+                if inner_key == "GAVR":
                     print("[INFO] Going to check nexus")
                     url_list = fetch_repo_path(inner_key)
                     output_result = check_artifact_from_nexus(url_list, inner_value, deployment_path)
