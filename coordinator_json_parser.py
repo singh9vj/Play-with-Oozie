@@ -238,7 +238,6 @@ def check_artifact_from_nexus(url_list, artifact_list, deployment_path):
         for each_nexus_url in url_list:
             try:
                 filename = each_nexus_url[each_nexus_url.rfind("/")+1:]
-                print("[URL] Going to check this artifact %s against this url %s" %(source_artifact, each_nexus_url))
                 if filename == source_artifact:
                     data = requests.get(each_nexus_url)
                     if data.status_code == 200:
