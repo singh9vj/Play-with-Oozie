@@ -231,7 +231,7 @@ def get_full_path(file_name, path):
     return full_path
 
 def check_artifact_from_nexus(url_list, artifact_list, deployment_path):
-    file_found = False
+    artifact_found_list = []
     source_artifact_list = list(artifact_list)
     result = []
     count = 0
@@ -242,22 +242,17 @@ def check_artifact_from_nexus(url_list, artifact_list, deployment_path):
             filename = each_nexus_url[each_nexus_url.rfind("/")+1:]
             print("[URL] Going to check this artifact %s against this url %s" %(source_artifact, each_nexus_url))
             if filename == source_artifact:
-                print("[INFO] Artifact in if: %s URL: %s FOUND_VALUE: %s" %(source_artifact, each_nexus_url, file_found))
                 data = requests.get(each_nexus_url)
-                if data.status_code == 200:            
-                    print("[INFO] This Artifact in 200 status code: %s has been found on this url: %s" %(source_artifact, each_nexus_url))    
-                    file_found = True
+                if data.status_code == 200:
+                    artifact_found_list.append(source_artifact)            
                     path = each_nexus_url + ":::" + deployment_path + "/lib"
                     result.append(path)
-                    print("[INFO] Artifact: %s URL: %s FOUND_VALUE: %s" %(source_artifact, each_nexus_url, file_found))
                 else:
-                    print("[ERROR] Problem in download artifact from nexus")
+                    print("[ERROR] Problem in download this artifact: %s from nexus" %(source_artifact))
             else:
-                print("[INFO] Artifact in else: %s URL: %s FOUND_VALUE: %s" %(source_artifact, each_nexus_url, file_found))
-                file_found = False
                 continue
 
-        if file_found:
+        if source_artifact in artifact_found_list:
             print("[INFO] This artifact: %s exist in this url: %s" %(source_artifact, each_nexus_url))
         else:
             print("[ERROR] The artifact of %s does not exist in the repository so exiting" %(source_artifact))
