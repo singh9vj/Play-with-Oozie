@@ -1,6 +1,19 @@
 resources:
 - repo: self
 
+trigger:
+  branches:
+    include:
+    - master
+#    exclude: 
+#    - master
+  paths:
+    include:
+    - '' ## Azure will listen the trigger on this specific path
+    exclude:
+    - 'azure-pipelines.yml' # Mention the filename here which needs to be excluded from trigger in the above path
+
+
 steps:
 
 - script: |
