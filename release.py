@@ -69,11 +69,12 @@ def delete_previous_artifact(build_info):
     for key , value in build_info.iteritems():
         for k , v in value.iteritems():
             if str(k) == "GAVR":
-                gavr_url_list = list(v["source_path"])
-                for gavr_url in gavr_url_list:                    
-                    source_path = gavr_url
+                gavr_url_list = list(v["both_path_list"])
+                for gavr_url in gavr_url_list:
+                    url = gavr_url.split(":::")[0]
+                    hdfs_path = gavr_url.split(":::")[1]                    
+                    source_path = url
                     file_name = source_path[source_path.rfind("/")+1:]
-                    hdfs_path = str(v["hdfs_path"])
                     hdfs_full_path = hdfs_path  + "/" + file_name
                     is_deleted = delete_artifact_on_hdfs(hdfs_path, file_name)
                     if is_deleted:
@@ -81,11 +82,12 @@ def delete_previous_artifact(build_info):
             elif str(k) == "JOB_PROPERTIES":
                 continue
             else:
-                source_path_list = list(v["source_path"])
+                source_path_list = list(v["both_path_list"])
                 for source_path in source_path_list:
-                    source_path = str(source_path)
-                    file_name = os.path.basename(source_path)
-                    hdfs_path = str(v["hdfs_path"])
+                    name = source_path.split(":::")[0]
+                    hdfs_path = source_path.split(":::")[1]
+                    local_path = str(name)
+                    file_name = os.path.basename(local_path)
                     hdfs_full_path = hdfs_path  + "/" + file_name
                     is_deleted = delete_artifact_on_hdfs(hdfs_path, file_name)
                     if is_deleted:
@@ -153,7 +155,7 @@ def copy_from_hdfs_to_backup(hdfs_full_path, file_name, back_up_dir):
         print("[INFO] Taking backup from hdfs: %s to this path: %s" %(hdfs_full_path, back_up_dir))
         backup_output , backup_result = execute_command(backup_copy_command)
         if backup_result == 0:
-            print("[INFO] Backup finished for this workflow")
+            print("[INFO] Backup finished for this artifact")
             status = True
         else:
             print("[ERROR] Something happened while executing this command %s" %(backup_copy_command))
@@ -209,6 +211,8 @@ def revert_changes(build_info, hdfs_back_dir, type):
     is_hdfs_artifact_deleted = False
     status = False
     delete_previous_artifact(build_info)
+    tmp_list = []
+    print("[INFO] Revert Process has started")
     for key , value in build_info.iteritems():
         app_name = os.path.dirname(key)
         app_name = os.path.basename(app_name)
@@ -217,36 +221,48 @@ def revert_changes(build_info, hdfs_back_dir, type):
         count = 0
         coordinator_primary_key = get_primary_key(value)
         for k,v in value.iteritems():
-            if str(k) == "GAVR":
-                gavr_url_list = list(v["source_path"])
+            if str(k) == "GAVR" or str(k) == "JAVA":
+                gavr_url_list = list(v["both_path_list"])
                 for gavr_url in gavr_url_list:
                     workflow_name = str(k)
-                    file_name = gavr_url[gavr_url.rfind("/")+1:]
-                    workflow_backup_dir = hdfs_back_dir + "/" + application_name + "/" + workflow_name + "/" + file_name
-                    hdfs_full_path = str(v["hdfs_path"]) + "/" + file_name
-                    get_backup_file_name = get_file_name_from_hdfs_backup(workflow_backup_dir)
-                    if get_backup_file_name:
-                        backup_happened = move_from_backup_to_hdfs(get_backup_file_name, hdfs_full_path)
-                        if not backup_happened:
-                            sys.exit(1)
+                    url = gavr_url.split(":::")[0]
+                    hdfs_path = gavr_url.split(":::")[1]                    
+                    file_name = url[url.rfind("/")+1:]
+                    if file_name in tmp_list:
+                        continue
                     else:
-                        print("[ERROR] No file found in this path %s" %(workflow_backup_dir))
+                        workflow_backup_dir = hdfs_back_dir + "/" + application_name + "/" + workflow_name + "/" + file_name
+                        hdfs_full_path = str(hdfs_path) + "/" + file_name
+                        get_backup_file_name = get_file_name_from_hdfs_backup(workflow_backup_dir)
+                        tmp_list.append(file_name)
+                        if get_backup_file_name:
+                            backup_happened = move_from_backup_to_hdfs(get_backup_file_name, hdfs_full_path)
+                            if not backup_happened:
+                                sys.exit(1)
+                        else:
+                            print("[ERROR] No file found in this path %s" %(workflow_backup_dir))
             elif str(k) == "JOB_PROPERTIES":
                 continue                
             else:
-                source_path_list = list(v["source_path"])
+                source_path_list = list(v["both_path_list"])
                 for source_path in source_path_list:
                     workflow_name = str(k)
-                    file_name = os.path.basename(source_path)
-                    workflow_backup_dir = hdfs_back_dir + "/" + application_name + "/" + workflow_name + "/" + file_name
-                    hdfs_full_path = str(v["hdfs_path"]) + "/" + file_name
-                    get_backup_file_name = get_file_name_from_hdfs_backup(workflow_backup_dir)
-                    if get_backup_file_name:
-                        backup_happened = move_from_backup_to_hdfs(get_backup_file_name, hdfs_full_path)
-                        if not backup_happened:
-                            sys.exit(1)
+                    name = source_path.split(":::")[0]
+                    hdfs_path = source_path.split(":::")[1]
+                    file_name = os.path.basename(name)
+                    if file_name in tmp_list:
+                        continue
                     else:
-                        print("[ERROR] No file found in this path %s" %(workflow_backup_dir))
+                        workflow_backup_dir = hdfs_back_dir + "/" + application_name + "/" + workflow_name + "/" + file_name
+                        hdfs_full_path = str(hdfs_path) + "/" + file_name
+                        get_backup_file_name = get_file_name_from_hdfs_backup(workflow_backup_dir)
+                        tmp_list.append(file_name)
+                        if get_backup_file_name:
+                            backup_happened = move_from_backup_to_hdfs(get_backup_file_name, hdfs_full_path)
+                            if not backup_happened:
+                                sys.exit(1)
+                        else:
+                            print("[ERROR] No file found in this path %s" %(workflow_backup_dir))
 
         cordinator_path = "/tmp/data_" + coordinator_primary_key + ".json"
         import_previous_cordinator = import_cordinator(cordinator_path)
@@ -255,6 +271,7 @@ def take_backup_from_hdfs_and_do_release(build_info, hdfs_back_dir, type):
     application_name = None
     workflow_name = None
     status = False
+    tmp_list = []
     for key , value in build_info.iteritems():
         app_name = os.path.dirname(key)
         app_name = os.path.basename(app_name)
@@ -264,30 +281,42 @@ def take_backup_from_hdfs_and_do_release(build_info, hdfs_back_dir, type):
         count = 0
         export_existing_coordinator = get_coordinator_primary_key(value)
         for k,v in value.iteritems():
-            if str(k) == "GAVR":
-                gavr_url_list = list(v["source_path"])
+            if str(k) == "GAVR" or str(k) == "JAVA":
+                gavr_url_list = list(v["both_path_list"])
                 for gavr_url in gavr_url_list:
                     workflow_name = str(k)
-                    file_name = gavr_url[gavr_url.rfind("/")+1:]
-                    workflow_backup_dir = hdfs_back_dir + "/" + application_name + "/" + workflow_name + "/" + file_name
-                    hdfs_full_path = str(v["hdfs_path"]) + "/" + file_name
-                    do_back_up = copy_from_hdfs_to_backup(hdfs_full_path, file_name, workflow_backup_dir)
-                    if not do_back_up:
-                        print("[ERROR] Not able to do backup from hdfs path: %s to back up path: %s" %(hdfs_back_dir, workflow_backup_dir))
-                        sys.exit(1)                    
+                    url = gavr_url.split(":::")[0]
+                    hdfs_path = gavr_url.split(":::")[1]
+                    file_name = url[url.rfind("/")+1:]
+                    if file_name in tmp_list:
+                        continue
+                    else:
+                        workflow_backup_dir = hdfs_back_dir + "/" + application_name + "/" + workflow_name + "/" + file_name
+                        hdfs_full_path = str(hdfs_path) + "/" + file_name
+                        do_back_up = copy_from_hdfs_to_backup(hdfs_full_path, file_name, workflow_backup_dir)
+                        tmp_list.append(file_name)
+                        if not do_back_up:
+                            print("[ERROR] Not able to do backup from hdfs path: %s to back up path: %s" %(hdfs_back_dir, workflow_backup_dir))
+                            sys.exit(1)                    
             elif str(k) == "JOB_PROPERTIES":
                 continue                
             else:
-                source_path_list = list(v["source_path"])
+                source_path_list = list(v["both_path_list"])
                 for source_path in source_path_list:
                     workflow_name = str(k)
-                    file_name = os.path.basename(source_path)
-                    workflow_backup_dir = hdfs_back_dir + "/" + application_name + "/" + workflow_name + "/" + file_name
-                    hdfs_full_path = str(v["hdfs_path"]) + "/" + file_name
-                    do_back_up = copy_from_hdfs_to_backup(hdfs_full_path, file_name, workflow_backup_dir)
-                    if not do_back_up:
-                        print("[ERROR] Not able to do backup from hdfs path: %s to back up path: %s" %(hdfs_back_dir, workflow_backup_dir))
-                        sys.exit(1)
+                    name = source_path.split(":::")[0]
+                    hdfs_path = source_path.split(":::")[1]
+                    file_name = os.path.basename(name)
+                    if file_name in tmp_list:
+                        continue
+                    else:
+                        workflow_backup_dir = hdfs_back_dir + "/" + application_name + "/" + workflow_name + "/" + file_name
+                        hdfs_full_path = str(hdfs_path) + "/" + file_name
+                        do_back_up = copy_from_hdfs_to_backup(hdfs_full_path, file_name, workflow_backup_dir)
+                        tmp_list.append(file_name)
+                        if not do_back_up:
+                            print("[ERROR] Not able to do backup from hdfs path: %s to back up path: %s" %(hdfs_back_dir, workflow_backup_dir))
+                            sys.exit(1)
 
 def download_artifact_from_nexus(nexus_url, path_to_download):
     successfully_download = False
@@ -348,36 +377,49 @@ def copy_artifact_from_local_to_hdfs_path(local_path, hdfs_path):
 
 def copy_from_local_to_hdfs_and_import_oozie(build_data):
     output = defaultdict(dict)
+    tmp_list = []
     for key , value in build_data.iteritems():
         app_name = os.path.dirname(key)
         app_name = str(os.path.basename(app_name))
         print("[INFO] Going to do deployment of this application %s" %(app_name))
         for k,v in value.iteritems():
-            if str(k) == "GAVR":
+            if str(k) == "GAVR" or str(k) == "JAVA":
                 download_path = "/tmp"
-                gavr_url_list = list(v["source_path"])
+                gavr_url_list = list(v["both_path_list"])
                 for gavr_url in gavr_url_list:
-                    output_path , able_to_download = download_artifact_from_nexus(gavr_url, download_path)
+                    url = gavr_url.split(":::")[0]
+                    hdfs_path = gavr_url.split(":::")[1]
+                    output_path , able_to_download = download_artifact_from_nexus(url, download_path)
                     source_path = output_path
-                    file_name = gavr_url[gavr_url.rfind("/")+1:]
-                    hdfs_full_path = str(v["hdfs_path"]) + "/" + file_name
-                    copy_successfully = copy_artifact_from_local_to_hdfs_path(source_path, hdfs_full_path)
-                    if not copy_successfully:
-                        revert_changes(build_data, hdfs_back_dir, "revert")
-                        sys.exit(1)
+                    file_name = url[url.rfind("/")+1:]
+                    if file_name in tmp_list:
+                        continue
+                    else:
+                        hdfs_full_path = str(hdfs_path) + "/" + file_name
+                        copy_successfully = copy_artifact_from_local_to_hdfs_path(source_path, hdfs_full_path)
+                        tmp_list.append(file_name)
+                        if not copy_successfully:
+                            revert_changes(build_data, hdfs_back_dir, "revert")
+                            sys.exit(1)
 
             elif str(k) == "JOB_PROPERTIES":
                 continue
             else:
-                source_path_list = list(v["source_path"])
+                source_path_list = list(v["both_path_list"])
                 for source_path in source_path_list:
-                    source_path = str(source_path)
-                    file_name = os.path.basename(source_path)
-                    hdfs_full_path = str(v["hdfs_path"]) + "/" + file_name
-                    copy_successfully = copy_artifact_from_local_to_hdfs_path(source_path, hdfs_full_path)
-                    if not copy_successfully:
-                        revert_changes(build_data, hdfs_back_dir, "revert")
-                        sys.exit(1)
+                    name = source_path.split(":::")[0]
+                    hdfs_path = source_path.split(":::")[1]
+                    local_path = str(name)
+                    file_name = os.path.basename(name)
+                    if file_name in tmp_list:
+                        continue
+                    else:
+                        hdfs_full_path = str(hdfs_path) + "/" + file_name
+                        copy_successfully = copy_artifact_from_local_to_hdfs_path(local_path, hdfs_full_path)
+                        tmp_list.append(file_name)
+                        if not copy_successfully:
+                            revert_changes(build_data, hdfs_back_dir, "revert")
+                            sys.exit(1)
         print("[INFO] Now going to import the cordinator via hue")
         hue_command = """sudo chmod 755 /var/run/cloudera-scm-agent/process/ ; export PATH="/home/cdhadmin/anaconda2/bin:$PATH" ;export HUE_CONF_DIR="/var/run/cloudera-scm-agent/process/`ls -alrt /var/run/cloudera-scm-agent/process | grep -i HUE_SERVER | tail -1 | awk '{print $9}'`" ; sudo chmod -R 757 $HUE_CONF_DIR; HUE_IGNORE_PASSWORD_SCRIPT_ERRORS=1 HUE_DATABASE_PASSWORD=ZbNNYWakrb /opt/cloudera/parcels/CDH/lib/hue/build/env/bin/hue loaddata """ + str(key)
         hue_command_output, hue_command_status_code = execute_command(hue_command)
