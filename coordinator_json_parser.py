@@ -232,38 +232,31 @@ def get_full_path(file_name, path):
 
 def check_artifact_from_nexus(url_list, artifact_list, deployment_path):
     file_found = False
-    found = False
     source_artifact_list = list(artifact_list)
     result = []
-    found_artifact = []
     count = 0
     for source_artifact in source_artifact_list:        
         for each_nexus_url in url_list:
-            print("[COUNT] current count is: %d" % (count+1))
+            print("[COUNT] current loop count is: %d" % (count+1))
             count = count + 1
-            try:
-                filename = each_nexus_url[each_nexus_url.rfind("/")+1:]
-                print("[URL] Going to check this artifact %s against this url %s" %(source_artifact, each_nexus_url))
-                print("[ARTIFACT_LIST] is %s" %found_artifact)
-                if filename == source_artifact:
-                    data = requests.get(each_nexus_url)
-                    if data.status_code == 200:
-                        found_artifact.append(filename)            
-                        print("[INFO] This Artifact: %s has been found on this url: %s" %(source_artifact, each_nexus_url))    
-                        file_found = True
-                        path = each_nexus_url + ":::" + deployment_path + "/lib"
-                        result.append(path)
-                    else:
-                        found_artifact.append(filename)
-                        print("[ERROR] Problem in download artifact from nexus")
+            filename = each_nexus_url[each_nexus_url.rfind("/")+1:]
+            print("[URL] Going to check this artifact %s against this url %s" %(source_artifact, each_nexus_url))
+            if filename == source_artifact:
+                print("[INFO] Artifact in if: %s URL: %s FOUND_VALUE: %s" %(source_artifact, each_nexus_url, file_found))
+                data = requests.get(each_nexus_url)
+                if data.status_code == 200:            
+                    print("[INFO] This Artifact in 200 status code: %s has been found on this url: %s" %(source_artifact, each_nexus_url))    
+                    file_found = True
+                    path = each_nexus_url + ":::" + deployment_path + "/lib"
+                    result.append(path)
+                    print("[INFO] Artifact: %s URL: %s FOUND_VALUE: %s" %(source_artifact, each_nexus_url, file_found))
                 else:
-                    file_found = False
-                    continue
-            except(Exception) as e:
-                print("[ERROR] Problem downloading the artifact. The error is: ")
-                print(e)
-                sys.exit(1)
-        print("[FOUND] artifact till found is: %s" %found_artifact)
+                    print("[ERROR] Problem in download artifact from nexus")
+            else:
+                print("[INFO] Artifact in else: %s URL: %s FOUND_VALUE: %s" %(source_artifact, each_nexus_url, file_found))
+                file_found = False
+                continue
+
         if file_found:
             print("[INFO] This artifact: %s exist in this url: %s" %(source_artifact, each_nexus_url))
         else:
