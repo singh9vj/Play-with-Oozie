@@ -68,7 +68,7 @@ def delete_previous_artifact(build_info):
     output = defaultdict(dict)
     for key , value in build_info.iteritems():
         for k , v in value.iteritems():
-            if str(k) == "GAVR":
+            if str(k) == "GAVR" or str(k) == "JAVA":
                 gavr_url_list = list(v["both_path_list"])
                 for gavr_url in gavr_url_list:
                     url = gavr_url.split(":::")[0]
