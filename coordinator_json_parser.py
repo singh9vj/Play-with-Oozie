@@ -234,27 +234,27 @@ def check_artifact_from_nexus(url_list, artifact_list, deployment_path):
     artifact_found_list = []
     source_artifact_list = list(artifact_list)
     result = []
-    count = 0
     for source_artifact in source_artifact_list:        
         for each_nexus_url in url_list:
-            print("[COUNT] current loop count is: %d" % (count+1))
-            count = count + 1
-            filename = each_nexus_url[each_nexus_url.rfind("/")+1:]
-            print("[URL] Going to check this artifact %s against this url %s" %(source_artifact, each_nexus_url))
-            if filename == source_artifact:
-                data = requests.get(each_nexus_url)
-                if data.status_code == 200:
-                    artifact_found_list.append(source_artifact)            
-                    path = each_nexus_url + ":::" + deployment_path + "/lib"
-                    result.append(path)
+            try:
+                filename = each_nexus_url[each_nexus_url.rfind("/")+1:]
+                print("[URL] Going to check this artifact %s against this url %s" %(source_artifact, each_nexus_url))
+                if filename == source_artifact:
+                    data = requests.get(each_nexus_url)
+                    if data.status_code == 200:
+                        print("[INFO] This artifact: %s exist in this url: %s" %(source_artifact, each_nexus_url))
+                        artifact_found_list.append(source_artifact)            
+                        path = each_nexus_url + ":::" + deployment_path + "/lib"
+                        result.append(path)
+                    else:
+                        print("[ERROR] Problem in download this artifact: %s from nexus" %(source_artifact))
                 else:
-                    print("[ERROR] Problem in download this artifact: %s from nexus" %(source_artifact))
-            else:
-                continue
-
-        if source_artifact in artifact_found_list:
-            print("[INFO] This artifact: %s exist in this url: %s" %(source_artifact, each_nexus_url))
-        else:
+                    continue
+            except(Exception) as e:
+                print("[ERROR] Problem downloading the artifact. The error is: ")
+                print(e)
+                sys.exit(1)            
+        if not source_artifact in artifact_found_list:
             print("[ERROR] The artifact of %s does not exist in the repository so exiting" %(source_artifact))
             sys.exit(1)
     return result 
