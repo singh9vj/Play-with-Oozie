@@ -236,12 +236,15 @@ def check_artifact_from_nexus(url_list, artifact_list, deployment_path):
     source_artifact_list = list(artifact_list)
     result = []
     found_artifact = []
+    count = 0
     for source_artifact in source_artifact_list:        
         for each_nexus_url in url_list:
+            print("[COUNT] current count is: %d" % count)
+            count = count + 1
             try:
                 filename = each_nexus_url[each_nexus_url.rfind("/")+1:]
                 print("[URL] Going to check this artifact %s against this url %s" %(source_artifact, each_nexus_url))
-                print("[ARTIFACT_LIST] is %s" %artifact_list)
+                print("[ARTIFACT_LIST] is %s" %found_artifact)
                 if filename in found_artifact:
                     print("[INFO] This artifact %s has already been found" %(filename))
                     continue
@@ -258,11 +261,12 @@ def check_artifact_from_nexus(url_list, artifact_list, deployment_path):
                         print("[ERROR] Problem in download artifact from nexus")
                 else:
                     file_found = False
+                    continue
             except(Exception) as e:
                 print("[ERROR] Problem downloading the artifact. The error is: ")
                 print(e)
                 sys.exit(1)
-        print("[FOUND] artifact is %s" %found_artifact)
+        print("[FOUND] artifact till found is: %s" %found_artifact)
         if file_found:
             print("[INFO] This artifact: %s exist in this url: %s" %(source_artifact, each_nexus_url))
         else:
