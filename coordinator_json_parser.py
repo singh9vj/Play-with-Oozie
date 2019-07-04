@@ -258,7 +258,6 @@ def check_artifact_from_nexus(url_list, artifact_list, deployment_path):
                         print("[ERROR] Problem in download artifact from nexus")
                 else:
                     file_found = False
-                    continue
             except(Exception) as e:
                 print("[ERROR] Problem downloading the artifact. The error is: ")
                 print(e)
