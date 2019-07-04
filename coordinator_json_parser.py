@@ -157,12 +157,12 @@ def check_artifact_on_vcs(final_dict):
                     print("[INFO] Going to check nexus")
                     url_list = fetch_repo_path(inner_key)
                     output_result = check_artifact_from_nexus(url_list, inner_value, deployment_path)
-                    spark_list.append(output_result)
+                    spark_list = output_result
                 elif inner_key == "JAVA":
                     print("[INFO] Going to check nexus")
                     url_list = fetch_repo_path(inner_key)
                     output_result = check_artifact_from_nexus(url_list, inner_value, deployment_path)
-                    jar_list.append(output_result)
+                    jar_list = output_result
                 else:
                     found_artifact = []
                     artifact_path_list = list(inner_value)
