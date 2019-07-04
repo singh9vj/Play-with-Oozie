@@ -239,15 +239,12 @@ def check_artifact_from_nexus(url_list, artifact_list, deployment_path):
     count = 0
     for source_artifact in source_artifact_list:        
         for each_nexus_url in url_list:
-            print("[COUNT] current count is: %d" % count)
+            print("[COUNT] current count is: %d" % (count+1))
             count = count + 1
             try:
                 filename = each_nexus_url[each_nexus_url.rfind("/")+1:]
                 print("[URL] Going to check this artifact %s against this url %s" %(source_artifact, each_nexus_url))
                 print("[ARTIFACT_LIST] is %s" %found_artifact)
-                if filename in found_artifact:
-                    print("[INFO] This artifact %s has already been found" %(filename))
-                    continue
                 if filename == source_artifact:
                     data = requests.get(each_nexus_url)
                     if data.status_code == 200:
