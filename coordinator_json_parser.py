@@ -48,8 +48,15 @@ def parse_json_object(data):
                     elif item['type'] == "shell-widget":
                         for shell_files in item['properties']['files']:
                             print("[INFO] shell script path is: %s" %(shell_files['value']))
-                            shell_list.append(str(shell_files['value']))
-                            shell_list = list(set(shell_list))
+                            artifact_name = str(shell_files['value'])
+                            if artifact_name.endswith('.sh'):
+                                shell_list.append(artifact_name)
+                                shell_list = list(set(shell_list))
+                            elif artifact_name.endswith('.jar'):
+                                spark_list.append(artifact_name)
+                                spark_list = list(set(spark_list))
+                            else:
+                                print("[WARNING] Expecting this file: %s to be located on the same path of shell scripts" %(artifact_name))
                             
                     elif item['type'] == "spark-widget":
                         print("[INFO] Spark artifact name is: %s" %(item['properties']['jars']))
