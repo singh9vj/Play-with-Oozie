@@ -8,6 +8,7 @@ from collections import defaultdict
 build_result = "build.json"
 hdfs_back_dir = os.environ['HDFS_BACK_DIR']
 oozie_url = os.environ["OOZIE_URL"]
+hue_db_password = os.environ['HUE_DB_PASSWORD']
 
 def execute_command(command):
     print(command)
@@ -122,7 +123,7 @@ def check_backup_directory(directory_info, hdfs_back_dir):
 def get_existing_coordinator_json(primary_key, export_backup_json_path):
     print("[INFO] Going to export existing cordinator file in json")
     json_dump_file_name = "/data_" + primary_key + ".json"
-    export_previous_cordinator_command = """sudo chmod 755 /var/run/cloudera-scm-agent/process/ ; export PATH="/home/cdhadmin/anaconda2/bin:$PATH" ;export HUE_CONF_DIR="/var/run/cloudera-scm-agent/process/`ls -alrt /var/run/cloudera-scm-agent/process | grep -i HUE_SERVER | tail -1 | awk '{print $9}'`" ; sudo chmod -R 757 $HUE_CONF_DIR; HUE_IGNORE_PASSWORD_SCRIPT_ERRORS=1 HUE_DATABASE_PASSWORD=ZbNNYWakrb /opt/cloudera/parcels/CDH/lib/hue/build/env/bin/hue dumpdata desktop.Document2 --indent 2 --pks=""" + primary_key + " --natural > " + export_backup_json_path + json_dump_file_name
+    export_previous_cordinator_command = """sudo chmod 755 /var/run/cloudera-scm-agent/process/ ; export PATH="/home/cdhadmin/anaconda2/bin:$PATH" ;export HUE_CONF_DIR="/var/run/cloudera-scm-agent/process/`ls -alrt /var/run/cloudera-scm-agent/process | grep -i HUE_SERVER | tail -1 | awk '{print $9}'`" ; sudo chmod -R 757 $HUE_CONF_DIR; HUE_IGNORE_PASSWORD_SCRIPT_ERRORS=1 HUE_DATABASE_PASSWORD=""" + hue_db_password + """ /opt/cloudera/parcels/CDH/lib/hue/build/env/bin/hue dumpdata desktop.Document2 --indent 2 --pks=""" + primary_key + " --natural > " + export_backup_json_path + json_dump_file_name
     export_command_output, export_command_status_code = execute_command(export_previous_cordinator_command)
     if export_command_status_code == 0:
         print("[INFO] Previous cordinator file has been exported successfully for backup")
@@ -133,7 +134,7 @@ def get_existing_coordinator_json(primary_key, export_backup_json_path):
 def import_cordinator(cordinator_file_path):
     print("[INFO] Going to import cordinator")
     import_successfull = False
-    import_command = """sudo chmod 755 /var/run/cloudera-scm-agent/process/ ; export PATH="/home/cdhadmin/anaconda2/bin:$PATH" ;export HUE_CONF_DIR="/var/run/cloudera-scm-agent/process/`ls -alrt /var/run/cloudera-scm-agent/process | grep -i HUE_SERVER | tail -1 | awk '{print $9}'`" ; sudo chmod -R 757 $HUE_CONF_DIR; HUE_IGNORE_PASSWORD_SCRIPT_ERRORS=1 HUE_DATABASE_PASSWORD=ZbNNYWakrb /opt/cloudera/parcels/CDH/lib/hue/build/env/bin/hue loaddata """ + str(cordinator_file_path)
+    import_command = """sudo chmod 755 /var/run/cloudera-scm-agent/process/ ; export PATH="/home/cdhadmin/anaconda2/bin:$PATH" ;export HUE_CONF_DIR="/var/run/cloudera-scm-agent/process/`ls -alrt /var/run/cloudera-scm-agent/process | grep -i HUE_SERVER | tail -1 | awk '{print $9}'`" ; sudo chmod -R 757 $HUE_CONF_DIR; HUE_IGNORE_PASSWORD_SCRIPT_ERRORS=1 HUE_DATABASE_PASSWORD=""" + hue_db_password + """ /opt/cloudera/parcels/CDH/lib/hue/build/env/bin/hue loaddata """ + str(cordinator_file_path)
     import_command_output, import_command_status_code = execute_command(import_command)
     if import_command_status_code == 0:
         print(import_command_output)
@@ -421,7 +422,7 @@ def copy_from_local_to_hdfs_and_import_oozie(build_data):
                             revert_changes(build_data, hdfs_back_dir, "revert")
                             sys.exit(1)
         print("[INFO] Now going to import the cordinator via hue")
-        hue_command = """sudo chmod 755 /var/run/cloudera-scm-agent/process/ ; export PATH="/home/cdhadmin/anaconda2/bin:$PATH" ;export HUE_CONF_DIR="/var/run/cloudera-scm-agent/process/`ls -alrt /var/run/cloudera-scm-agent/process | grep -i HUE_SERVER | tail -1 | awk '{print $9}'`" ; sudo chmod -R 757 $HUE_CONF_DIR; HUE_IGNORE_PASSWORD_SCRIPT_ERRORS=1 HUE_DATABASE_PASSWORD=ZbNNYWakrb /opt/cloudera/parcels/CDH/lib/hue/build/env/bin/hue loaddata """ + str(key)
+        hue_command = """sudo chmod 755 /var/run/cloudera-scm-agent/process/ ; export PATH="/home/cdhadmin/anaconda2/bin:$PATH" ;export HUE_CONF_DIR="/var/run/cloudera-scm-agent/process/`ls -alrt /var/run/cloudera-scm-agent/process | grep -i HUE_SERVER | tail -1 | awk '{print $9}'`" ; sudo chmod -R 757 $HUE_CONF_DIR; HUE_IGNORE_PASSWORD_SCRIPT_ERRORS=1 HUE_DATABASE_PASSWORD=""" + hue_db_password + """ /opt/cloudera/parcels/CDH/lib/hue/build/env/bin/hue loaddata """ + str(key)
         hue_command_output, hue_command_status_code = execute_command(hue_command)
         if hue_command_status_code == 0:
             print(hue_command_output)
