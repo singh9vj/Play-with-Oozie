@@ -9,6 +9,8 @@ build_result = "build.json"
 hdfs_back_dir = os.environ['HDFS_BACK_DIR']
 oozie_url = os.environ["OOZIE_URL"]
 hue_db_password = os.environ['HUE_DB_PASSWORD']
+parent_directory_id = os.environ['PARENT_DIRECTORY_ID']
+owner = os.environ['OWNER']
 
 def execute_command(command):
     print(command)
@@ -20,6 +22,21 @@ def get_details_of_build_process(build_result):
     with open(build_result) as json_file:
         data = json.load(json_file)
     return data
+
+def search_and_replace_parent_director_and_owner_in_coordinator(filename):
+    print("[INFO] Going to replace parent_directory to %s and owner to %s in the existing coordinator" %(parent_directory_id, owner))
+    with open(filename, 'r') as file:
+        json_data = json.load(file)
+        for item in json_data:
+            if str(item["fields"]["type"]) == "oozie-workflow2" or str(item["fields"]["type"]) == "oozie-coordinator2":
+                item["fields"]["parent_directory"][0] = parent_directory_id
+                item["fields"]["owner"][0] = owner
+            else:
+                continue
+    
+    with open(filename, 'w') as file:
+        json.dump(json_data, file, indent=2)
+    print("[INFO] Successfully replace the value in coordinator")
 
 def get_backup_directory_info(data):
     print("[INFO] Taking backup first..")
@@ -421,6 +438,7 @@ def copy_from_local_to_hdfs_and_import_oozie(build_data):
                         if not copy_successfully:
                             revert_changes(build_data, hdfs_back_dir, "revert")
                             sys.exit(1)
+        search_and_replace_parent_director_and_owner_in_coordinator(str(key))
         print("[INFO] Now going to import the cordinator via hue")
         hue_command = """sudo chmod 755 /var/run/cloudera-scm-agent/process/ ; export PATH="/home/cdhadmin/anaconda2/bin:$PATH" ;export HUE_CONF_DIR="/var/run/cloudera-scm-agent/process/`ls -alrt /var/run/cloudera-scm-agent/process | grep -i HUE_SERVER | tail -1 | awk '{print $9}'`" ; sudo chmod -R 757 $HUE_CONF_DIR; HUE_IGNORE_PASSWORD_SCRIPT_ERRORS=1 HUE_DATABASE_PASSWORD=""" + hue_db_password + """ /opt/cloudera/parcels/CDH/lib/hue/build/env/bin/hue loaddata """ + str(key)
         hue_command_output, hue_command_status_code = execute_command(hue_command)
